@@ -1,9 +1,9 @@
 import { Request, Response } from './HttpContract';
 
 export abstract class RouterContract {
-  protected endpoint: string;
-  protected method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
-  public handler: (request: Request, response: Response) => void;
+  protected readonly endpoint: string;
+  protected readonly method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+  public readonly handler: (request: Request, response: Response) => void;
 
   constructor(endpoint: string, method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', handler: (request: Request, response: Response) => void) {
     this.endpoint = endpoint;

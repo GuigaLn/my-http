@@ -2,54 +2,70 @@ import { createServer as HttpCreateServer } from 'http';
 
 import { ServerContract } from '../contracts/ServerContract';
 import { Router } from './Router';
-import { Request, Response } from '@src/contracts/HttpContract';
+import { Request, Response } from '../contracts/HttpContract';
+import { NotFoundException, ServerException } from './HttpException';
+import { HttpSuccessContract } from '../contracts/HttpSuccessContract';
 
 class Server extends ServerContract {
-  createServer(): void {
+  public createServer(): void {
     if(this.http) {
-      console.error('Error: This server is created.');
+      console.error('Error: This server has already been created.');
       process.exit(1);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.http = HttpCreateServer((request: Request, response: any) => {
       try {
         const { method, url } = request;
 
         const findRouter = this.routes[`${url}-${method}`];
         if(findRouter) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          response.send = (statusCode: number, body: any) => {
-            response.writeHead(statusCode, { 'Content-Type': 'JSON' });
-            response.end(JSON.stringify(body));
+          response.send = (httpSuccess: HttpSuccessContract) => {
+            response.writeHead(httpSuccess.statusCode, httpSuccess.headers);
+            response.end(JSON.stringify(httpSuccess));
           };
 
           findRouter.handler(request, response);
-        } else {
-          response.writeHead(404, { 'Content-Type': 'JSON' });
-          response.end(JSON.stringify({ message: 'Not found' }));
-        }
+          return;
+        } 
+
+        const exception = new NotFoundException();
+        response.writeHead(exception.statusCode, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({
+          message: exception.message,
+          statusCode: exception.statusCode,
+          error: exception.error
+        }));
+        return;
       } catch(error) {
-        console.log(error);
-        response.writeHead(200, { 'Content-Type': 'JSON' });
-        response.end(JSON.stringify({ message: 'Server error' }));
+        if(this.handlingErrors) {
+          this.handlingErrors(request, response, error);
+          return;
+        }
+          
+        const exception = new ServerException();
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({
+          message: exception.message,
+          statusCode: exception.statusCode,
+          error: exception.error
+        }));
       }
     });
   }
 
-  listen(port: number, listeningListener: (() => void)): void {
+  public listen(port: number, listeningListener: (() => void)): void {
     if(!this.http) {
-      console.error('Error: This server not created.');
+      console.error('Error: This server has not been created.');
       process.exit(1);
     }
 
     if(!port) {
-      console.error('Port is required');
+      console.error('Error: Port is required');
       process.exit(1);
     }
 
     if(!listeningListener) {
-      console.error('Listening Listener is required');
+      console.error('Error: Listening Listener is required');
       process.exit(1);
     }
 
@@ -71,10 +87,18 @@ class Server extends ServerContract {
     this.http.listen(port, listeningListener);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  addRouter(endpoint: string, method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', handler: (request: Request, response: Response) => void) {
+  public addRouter(endpoint: string, method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', handler: (request: Request, response: Response) => void) {
     const router = new Router(endpoint, method, handler);
     this.routes[`${endpoint}-${method}`] = router;
+  } 
+
+  public addHandlingErrors(handlingErrors: (request: Request, response: Response, error: unknown) => void) {
+    if(this.handlingErrors) {
+      console.error('Error: Error handling already exists.');
+      process.exit(1);
+    }
+
+    this.handlingErrors = handlingErrors;
   }
 }
 
